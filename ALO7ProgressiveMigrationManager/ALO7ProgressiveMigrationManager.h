@@ -31,12 +31,13 @@
 #import <Foundation/Foundation.h>
 #import "ALO7ProgressiveMigrationError.h"
 #import "NSManagedObjectModel+ALO7Util.h"
+#import "NSPersistentStoreCoordinator+ALO7Util.h"
 
 @protocol ALO7ProgressiveMigrateDelegate;
 
 @interface ALO7ProgressiveMigrationManager : NSObject
 + (instancetype)sharedManager;
-- (BOOL)migrateStoreAtUrl:(NSURL *)srcStoreUrl storeType:(NSString *)storeType targetModel:(NSManagedObjectModel *)targetModel error:(NSError **)error;
+- (BOOL)migrateStoreAtUrl:(NSURL *)srcStoreUrl storeType:(NSString *)storeType targetModel:(NSManagedObjectModel *)targetModel options:(NSDictionary *)options error:(NSError **)error;
 
 @property (nonatomic, weak) id <ALO7ProgressiveMigrateDelegate> delegate;
 @property (nonatomic, strong, readonly) NSManagedObjectModel *migrationSrcModel;

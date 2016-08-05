@@ -50,7 +50,7 @@
     return manager;
 }
 
-- (BOOL)migrateStoreAtUrl:(NSURL *)srcStoreUrl storeType:(NSString *)storeType targetModel:(NSManagedObjectModel *)targetModel error:(NSError **)error
+- (BOOL)migrateStoreAtUrl:(NSURL *)srcStoreUrl storeType:(NSString *)storeType targetModel:(NSManagedObjectModel *)targetModel options:(NSDictionary *)options error:(NSError **)error
 {
     if (!self.delegate) {
         NSLog(@"%@ need a delegate to perform progressive migration!", NSStringFromClass([self class]));
@@ -59,7 +59,7 @@
     
     // preprocess the migration steps to minimum count; consecutive lightweight steps will be merged into one step
     ALO7ProgressiveMigrationStepManager *stepManager = [[ALO7ProgressiveMigrationStepManager alloc] init];
-    BOOL isMigrateStepsGenerated = [self generateMigrateStepsWithManager:stepManager forStoreAtUrl:srcStoreUrl storeType:storeType targetMode:targetModel error:error];
+    BOOL isMigrateStepsGenerated = [self generateMigrateStepsWithManager:stepManager forStoreAtUrl:srcStoreUrl storeType:storeType targetMode:targetModel options:options error:error];
     if (!isMigrateStepsGenerated) {
         NSLog(@"%@ generate migrate steps failed!", NSStringFromClass([self class]));
         return NO;
@@ -70,7 +70,7 @@
     __block BOOL isMigrateOk = YES;
     // start to migrate step by step
     [stepManager enumerateStepsUsingBlock:^(ALO7ProgressiveMigrationStep *step, NSUInteger idx, BOOL *stop){
-        if(![self migrateOneStep:step forStoreAtUrl:srcStoreUrl storeType:storeType error:error]) {
+        if(![self migrateOneStep:step forStoreAtUrl:srcStoreUrl storeType:storeType options:options error:error]) {
             isMigrateOk = NO;
             *stop = YES;
         }
@@ -81,10 +81,10 @@
 
 #pragma mark - Migrate details(private methods)
 
-- (BOOL)generateMigrateStepsWithManager:(ALO7ProgressiveMigrationStepManager *)stepManager forStoreAtUrl:(NSURL *)srcStoreUrl storeType:(NSString *)storeType targetMode:(NSManagedObjectModel *)targetModel  error:(NSError **)error
+- (BOOL)generateMigrateStepsWithManager:(ALO7ProgressiveMigrationStepManager *)stepManager forStoreAtUrl:(NSURL *)srcStoreUrl storeType:(NSString *)storeType targetMode:(NSManagedObjectModel *)targetModel options:(NSDictionary *)options error:(NSError **)error
 {
     // find the data model file according to the source store file
-    NSDictionary *srcMetaData = [NSPersistentStoreCoordinator metadataForPersistentStoreOfType:storeType URL:srcStoreUrl error:error];
+    NSDictionary *srcMetaData = [NSPersistentStoreCoordinator getMetadataForPersistentStoreOfType:storeType URL:srcStoreUrl options:options error:error];
     if (!srcMetaData) {
         *error = [ALO7ProgressiveMigrationError errorWithCode:kALO7ProgressiveMigrateErrorSrcStoreMetaDataNotFound];
         return NO;
@@ -134,12 +134,12 @@
     return YES;
 }
 
-- (BOOL)migrateOneStep:(ALO7ProgressiveMigrationStep *)oneStep forStoreAtUrl:(NSURL *)srcStoreUrl storeType:(NSString *)storeType error:(NSError **)error
+- (BOOL)migrateOneStep:(ALO7ProgressiveMigrationStep *)oneStep forStoreAtUrl:(NSURL *)srcStoreUrl storeType:(NSString *)storeType options:(NSDictionary *)options error:(NSError **)error
 {
     if (oneStep.migrationType == kALO7ProgressiveMigrationStepLightWeight) {
-        return [self lightweightMigrationURL:srcStoreUrl toModel:oneStep.desModel type:storeType error:error];
+        return [self lightweightMigrationURL:srcStoreUrl toModel:oneStep.desModel type:storeType options:options error:error];
     } else if (oneStep.migrationType == kALO7ProgressiveMigrationStepHeavyWeight) {
-        return [self heavyweightMigrationURL:srcStoreUrl srcModel:oneStep.srcModel desModel:oneStep.desModel mappingModel:oneStep.mappingModel storeType:storeType error:error];
+        return [self heavyweightMigrationURL:srcStoreUrl srcModel:oneStep.srcModel desModel:oneStep.desModel mappingModel:oneStep.mappingModel storeType:storeType options:options error:error];
     } else {
         NSLog(@"migrate one step, type error %@", oneStep);
         return NO;
@@ -148,11 +148,11 @@
     return YES;
 }
 
-- (BOOL)lightweightMigrationURL:(NSURL *)sourceStoreURL toModel:(NSManagedObjectModel *)destinationModel type:(NSString *)type error:(NSError **)error {
-    NSDictionary *storeOptions = @{NSMigratePersistentStoresAutomaticallyOption: @YES,
-                                   NSInferMappingModelAutomaticallyOption: @YES,
-                                   NSSQLitePragmasOption: @{@"journal_mode" : @"WAL"}
-                                   };
+- (BOOL)lightweightMigrationURL:(NSURL *)sourceStoreURL toModel:(NSManagedObjectModel *)destinationModel type:(NSString *)type options:(NSDictionary *)options error:(NSError **)error {
+    NSMutableDictionary *storeOptions = [NSMutableDictionary dictionaryWithDictionary:options];
+    storeOptions[NSMigratePersistentStoresAutomaticallyOption] = @YES;
+    storeOptions[NSInferMappingModelAutomaticallyOption] = @YES;
+    storeOptions[NSSQLitePragmasOption] = @{@"journal_mode" : @"WAL"};
     
     NSPersistentStoreCoordinator *storeCoordinator = [[NSPersistentStoreCoordinator alloc] initWithManagedObjectModel:destinationModel];
     
@@ -167,7 +167,7 @@
     return (persistentStore != nil);
 }
 
-- (BOOL)heavyweightMigrationURL:(NSURL *)sourceStoreURL srcModel:(NSManagedObjectModel *)srcModel desModel:(NSManagedObjectModel *)desModel mappingModel:(NSMappingModel *)mappingModel storeType:(NSString *)type error:(NSError **)error
+- (BOOL)heavyweightMigrationURL:(NSURL *)sourceStoreURL srcModel:(NSManagedObjectModel *)srcModel desModel:(NSManagedObjectModel *)desModel mappingModel:(NSMappingModel *)mappingModel storeType:(NSString *)type options:(NSDictionary *)options error:(NSError **)error
 {
 
     NSMigrationManager *migrateManager = [[NSMigrationManager alloc]
@@ -190,7 +190,7 @@
     }
     
     // do the heavy migraion
-    if (![migrateManager migrateStoreFromURL:sourceStoreURL type:type options:nil withMappingModel:mappingModel toDestinationURL:newStoreURL destinationType:type destinationOptions:nil error:error]) {
+    if (![migrateManager migrateStoreFromURL:sourceStoreURL type:type options:options withMappingModel:mappingModel toDestinationURL:newStoreURL destinationType:type destinationOptions:options error:error]) {
         return NO;
     }
 
