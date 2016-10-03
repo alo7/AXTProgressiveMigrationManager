@@ -17,7 +17,7 @@ ALO7ProgressiveMigrationManager starts with finding the corresponding ManagedObj
 ###Installation
 Just drag-and-drop into your project. Or if you prefer to using Cocopods:
 
-    pod 'ALO7ProgressiveMigrationManager', '~> 1.0.0'
+    pod 'ALO7ProgressiveMigrationManager'
 ###API
 ```
 NSError *error;
